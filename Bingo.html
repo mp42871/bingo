@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Mechanicsburg Bingo Caller</title>
+  <style>
+    :root {
+      --primary-color: #4a148c;
+      --accent-color: #fdd835;
+      --bg-color: #f3f4f6;
+      --text-color: #1f2937;
+      --card-bg: #ffffff;
+    }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      text-align: center;
+      margin: 0;
+      padding: 0 20px;
+    }
+    h1 {
+      background-color: var(--primary-color);
+      color: white;
+      margin: 0 -20px 20px;
+      padding: 20px 10px;
+      font-size: 2.5em;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+    }
+    .bingo-ball {
+      width: 400px;
+      height: 400px;
+      font-size: 10em;
+      margin: 10px auto;
+      border-radius: 50%;
+      background-color: var(--accent-color);
+      color: var(--primary-color);
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.1), 0 6px 16px rgba(0, 0, 0, 0.2);
+    }
+    #current {
+      font-size: 5em;
+      margin: 10px 0;
+      color: var(--primary-color);
+    }
+    .card {
+      background-color: var(--card-bg);
+      padding: 20px;
+      margin: 10px auto;
+      border-radius: 12px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+      max-width: 800px;
+    }
+    button {
+      background-color: var(--primary-color);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 10px 20px;
+      margin: 10px 5px;
+      font-size: 1.1em;
+      cursor: pointer;
+      transition: background-color 0.2s ease;
+    }
+    button:hover {
+      background-color: #6a1b9a;
+    }
+    select, textarea, input[type='number'] {
+      margin-top: 10px;
+      font-size: 1.1em;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      width: 80%;
+      max-width: 500px;
+    }
+    label {
+      font-weight: bold;
+      display: block;
+      margin-top: 20px;
+    }
+    #calledGrid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 6px;
+      justify-items: center;
+      max-width: 600px;
+      margin: 20px auto;
+    }
+    @media (max-width: 600px) {
+      #current { font-size: 3em; }
+      .bingo-ball { width: 160px; height: 160px; font-size: 6em; }
+    }
+  </style>
+</head>
+<body>
+  <h1>Mechanicsburg Bingo Caller</h1>
+  <div class="bingo-ball" id="bingoBall">--</div>
+  <div id="current">Waiting for start...</div>
+  <div class="card">
+    <div><strong>Remaining Numbers:</strong> <span id="remainingList"></span></div>
+    <div style="margin-top: 20px;">
+      <button onclick="startGame()">Start Game</button>
+      <button onclick="callNumber()">Call Number</button>
+      <button onclick="repeatNumber()">Repeat</button>
+      <button onclick="toggleAudio()" id="audioToggle">🔊 Audio On</button>
+      <button onclick="toggleTimer()" id="timerToggle">▶️ Start Timer</button>
+      <button onclick="saveGame()">💾 Save</button>
+      <button onclick="resumeGame()">⏪ Resume</button>
+    </div>
+	
+  <div id="calledGrid">
+    <div><strong>B</strong></div>
+    <div><strong>I</strong></div>
+    <div><strong>N</strong></div>
+    <div><strong>G</strong></div>
+    <div><strong>O</strong></div>
+  </div>
+    <label for="intervalInput">Timer Interval (seconds)</label>
+    <input type="number" id="intervalInput" value="5" min="1">
+  </div>
+  <div class="card">
+    <label for="voiceSelect">Voice Selection</label>
+    <select id="voiceSelect"></select>
+    <label for="customSet">Custom Bingo Numbers (Optional)</label>
+    <textarea id="customSet" rows="5" placeholder="Enter your custom numbers, separated by commas"></textarea>
+  </div>
+  <script>
+    let remainingNumbers = [];
+    let calledNumbers = [];
+    let voices = [];
+    let audioEnabled = true;
+    let timerEnabled = false;
+    let timerInterval = null;
+    function toggleAudio() { audioEnabled = !audioEnabled; document.getElementById('audioToggle').textContent = audioEnabled ? '🔊 Audio On' : '🔇 Audio Off'; }
+    function toggleTimer() { timerEnabled = !timerEnabled; const toggleBtn = document.getElementById("timerToggle"); const interval = parseInt(document.getElementById("intervalInput").value) * 1000 || 5000; if (timerEnabled) { toggleBtn.textContent = '⏹️ Stop Timer'; timerInterval = setInterval(callNumber, interval); } else { toggleBtn.textContent = '▶️ Start Timer'; clearInterval(timerInterval); } }
+    function populateVoiceList() { voices = speechSynthesis.getVoices().filter(v => v.lang.startsWith("en")); const voiceSelect = document.getElementById("voiceSelect"); voiceSelect.innerHTML = ""; voices.forEach((voice, i) => { const option = document.createElement("option"); option.value = i; option.textContent = voice.name + " (" + voice.lang + ")"; voiceSelect.appendChild(option); }); }
+    if (typeof speechSynthesis !== 'undefined') { speechSynthesis.onvoiceschanged = populateVoiceList; }
+    function getDefaultBingoNumbers() { const ranges = { B: [1, 15], I: [16, 30], N: [31, 45], G: [46, 60], O: [61, 75] }; const list = []; for (const letter in ranges) { for (let i = ranges[letter][0]; i <= ranges[letter][1]; i++) { list.push(letter + i); } } return list; }
+    function startGame() {
+      const input = document.getElementById('customSet').value.trim();
+      remainingNumbers = input ? input.split(',').map(n => n.trim()).filter(n => n) : getDefaultBingoNumbers();
+      calledNumbers = [];
+      document.getElementById('remainingList').textContent = remainingNumbers.join(', ');
+      document.getElementById('bingoBall').textContent = '--';
+      document.getElementById('current').textContent = 'Waiting for start...';
+      document.getElementById('current').style.fontSize = '5em';
+      const grid = document.getElementById('calledGrid');
+      grid.innerHTML = `
+        <div><strong>B</strong></div>
+        <div><strong>I</strong></div>
+        <div><strong>N</strong></div>
+        <div><strong>G</strong></div>
+        <div><strong>O</strong></div>
+      `;
+      if (timerEnabled) toggleTimer();
+    }
+    function callNumber() {
+      if (remainingNumbers.length === 0) { document.getElementById('bingoBall').textContent = "🎉"; document.getElementById('current').textContent = "All numbers called!"; if (timerEnabled) toggleTimer(); return; }
+      const ball = document.getElementById('bingoBall');
+      const current = document.getElementById('current');
+      let rollCount = 0;
+      const rollMax = 20;
+      const roller = setInterval(() => {
+        ball.textContent = remainingNumbers[Math.floor(Math.random() * remainingNumbers.length)];
+        if (++rollCount >= rollMax) {
+          clearInterval(roller);
+          const idx = Math.floor(Math.random() * remainingNumbers.length);
+          const number = remainingNumbers.splice(idx, 1)[0];
+          calledNumbers.push(number);
+          ball.textContent = number;
+          document.getElementById('remainingList').textContent = remainingNumbers.join(', ');
+          current.textContent = 'Current Number: ' + number;
+          current.style.fontSize = '2em';
+          const grid = document.getElementById('calledGrid');
+          grid.innerHTML = '';
+          const bingoPattern = /^[BINGO][1-9][0-9]?$/;
+          if (calledNumbers.every(n => bingoPattern.test(n))) {
+            grid.innerHTML = `
+              <div><strong>B</strong></div>
+              <div><strong>I</strong></div>
+              <div><strong>N</strong></div>
+              <div><strong>G</strong></div>
+              <div><strong>O</strong></div>
+            `;
+            const cols = { B: [], I: [], N: [], G: [], O: [] };
+            calledNumbers.forEach(n => { const L = n[0], v = parseInt(n.slice(1)); cols[L].push(v); });
+            Object.keys(cols).forEach(L => cols[L].sort((a,b)=>a-b));
+            const rows = Math.max(...Object.values(cols).map(c=>c.length));
+            for (let r = 0; r < rows; r++) {
+              ['B','I','N','G','O'].forEach(L => {
+                const cell = document.createElement('div');
+                const v = cols[L][r];
+                cell.textContent = v != null ? L+v : '';
+                Object.assign(cell.style, { padding:'6px', border:'1px solid #ccc', borderRadius:'6px', backgroundColor:'#fff', fontWeight:'bold', fontSize:'1em', minWidth:'40px', textAlign:'center' });
+                if (L+v === calledNumbers[calledNumbers.length-1]) { cell.style.backgroundColor = '#d1c4e9'; cell.style.border = '3px solid #7e57c2'; }
+                grid.appendChild(cell);
+              });
+            }
+          } else {
+            calledNumbers.forEach(n => {
+              const cell = document.createElement('div');
+              cell.textContent = n;
+              Object.assign(cell.style, { padding:'6px', border:'1px solid #ccc', borderRadius:'6px', backgroundColor:'#fff', fontWeight:'bold', fontSize:'1em', textAlign:'center' });
+              if (n === calledNumbers[calledNumbers.length-1]) { cell.style.backgroundColor = '#d1c4e9'; cell.style.border = '3px solid #7e57c2'; }
+              grid.appendChild(cell);
+            });
+          }
+          setTimeout(() => { if (audioEnabled) speak(number); }, 1000);
+        }
+      }, 50);
+    }
+    function repeatNumber() { if (calledNumbers.length === 0) { alert("No number has been called yet."); return; } speak(calledNumbers[calledNumbers.length - 1]); }
+    function speak(text) { if (!audioEnabled) return; const msg = new SpeechSynthesisUtterance(text); const selectedIndex = document.getElementById("voiceSelect").value; if (voices[selectedIndex]) { msg.voice = voices[selectedIndex]; msg.lang = msg.voice.lang; } window.speechSynthesis.speak(msg); }
+    function saveGame() { localStorage.setItem("bingo_called", JSON.stringify(calledNumbers)); localStorage.setItem("bingo_remaining", JSON.stringify(remainingNumbers)); alert("Game saved!"); }
+    function resumeGame() { const called = JSON.parse(localStorage.getItem("bingo_called") || "[]"); const remaining = JSON.parse(localStorage.getItem("bingo_remaining") || "[]"); if (called.length + remaining.length === 0) { alert("No saved game found."); return; } calledNumbers = called; remainingNumbers = remaining; document.getElementById('remainingList').textContent = remainingNumbers.join(', '); document.getElementById('bingoBall').textContent = calledNumbers[calledNumbers.length - 1] || "--"; document.getElementById('current').textContent = 'Current Number: ' + (calledNumbers[calledNumbers.length - 1] || "--"); document.getElementById('current').style.fontSize = '2em';
+      const grid = document.getElementById('calledGrid'); grid.innerHTML = ''; const bingoPattern = /^[BINGO][1-9][0-9]?$/; if (calledNumbers.every(n => bingoPattern.test(n))) { grid.innerHTML = ` <div><strong>B</strong></div><div><strong>I</strong></div><div><strong>N</strong></div><div><strong>G</strong></div><div><strong>O</strong></div>`; const cols = { B: [], I: [], N: [], G: [], O: [] }; calledNumbers.forEach(n => { const L = n[0], v = parseInt(n.slice(1)); cols[L].push(v); }); Object.keys(cols).forEach(L => cols[L].sort((a,b)=>a-b)); const rows = Math.max(...Object.values(cols).map(c=>c.length)); for (let r=0;r<rows;r++){ ['B','I','N','G','O'].forEach(L=>{ const cell=document.createElement('div'); const v=cols[L][r]; cell.textContent=v!=null?L+v:''; Object.assign(cell.style,{ padding:'6px', border:'1px solid #ccc', borderRadius:'6px', backgroundColor:'#fff', fontWeight:'bold', fontSize:'1em', minWidth:'40px', textAlign:'center' }); if(L+v===calledNumbers[calledNumbers.length-1]){cell.style.backgroundColor='#d1c4e9';cell.style.border='3px solid #7e57c2';} grid.appendChild(cell); }); } } else { calledNumbers.forEach(n=>{ const cell=document.createElement('div'); cell.textContent=n; Object.assign(cell.style,{ padding:'6px', border:'1px solid #ccc', borderRadius:'6px', backgroundColor:'#fff', fontWeight:'bold', fontSize:'1em', textAlign:'center' }); if(n===calledNumbers[calledNumbers.length-1]){cell.style.backgroundColor='#d1c4e9';cell.style.border='3px solid #7e57c2';} grid.appendChild(cell); }); }
+    }
+  </script>
+</body>
+</html>
